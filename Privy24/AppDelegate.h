@@ -7,19 +7,26 @@
 //
 
 #import <UIKit/UIKit.h>
-#import <CoreData/CoreData.h>
+#import "JKLLockScreenViewController.h"
+#import "UIWindow+PazLabs.h"
 
-@interface AppDelegate : UIResponder <UIApplicationDelegate>
+
+//openssl pkcs12 -in apns-dev-cert.p12 -out apns-dev-cert.pem -nodes -clcerts
+
+@class SocketIOClient;
+@class Person;
+@class DBManager;
+@class Reachability;
+
+@interface AppDelegate : UIResponder <UIApplicationDelegate,JKLLockScreenViewControllerDataSource,JKLLockScreenViewControllerDelegate>
 
 @property (strong, nonatomic) UIWindow *window;
+@property (strong, nonatomic) UITabBarController *tabBarController;
+@property (strong, nonatomic) NSString *pushToken;
+@property (nonatomic) Reachability *reachability;
+@property  UIBackgroundTaskIdentifier bgTaskIdentifier;
 
-@property (readonly, strong, nonatomic) NSManagedObjectContext *managedObjectContext;
-@property (readonly, strong, nonatomic) NSManagedObjectModel *managedObjectModel;
-@property (readonly, strong, nonatomic) NSPersistentStoreCoordinator *persistentStoreCoordinator;
-
-- (void)saveContext;
-- (NSURL *)applicationDocumentsDirectory;
-
+- (void)openChatScreenWithUser:(Person *)person andSelectedTab:(NSInteger)index;
 
 @end
 

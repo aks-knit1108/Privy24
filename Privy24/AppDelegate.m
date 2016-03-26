@@ -7,6 +7,11 @@
 //
 
 #import "AppDelegate.h"
+#import "DBManager.h"
+#import "constants.h"
+#import "SocketLisner.h"
+#import "Reachability.h"
+#import "Chat.h"
 
 @interface AppDelegate ()
 
@@ -17,6 +22,59 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // Override point for customization after application launch.
+   
+    [[UITableView appearance] setTintColor:kAPP_COLOR];
+    [[UINavigationBar appearance] setTintColor:kAPP_COLOR];
+    [[UITabBar appearance] setTintColor:kAPP_COLOR];
+    
+    //Change the host name here to change the server you want to monitor.
+    NSString *remoteHostName = @"www.apple.com";
+    
+    
+    self.reachability = [Reachability reachabilityWithHostName:remoteHostName];
+    [self.reachability startNotifier];
+
+    
+    if ([[NSUserDefaults standardUserDefaults] objectForKey:kPUSH_TOKEN]) {
+        self.pushToken = [[NSUserDefaults standardUserDefaults] objectForKey:kPUSH_TOKEN];
+    } else {
+        self.pushToken = @"";
+    }
+    
+    // Let the device know we want to receive push notifications
+    // Register for Push Notitications, if running on iOS 8
+    UIUserNotificationType userNotificationTypes = (UIUserNotificationTypeAlert | UIUserNotificationTypeBadge | UIUserNotificationTypeSound);
+    UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes:userNotificationTypes categories:nil];
+    [application registerUserNotificationSettings:settings];
+    [application registerForRemoteNotifications];
+    
+    
+    // Check user registartion status
+    if ([[NSUserDefaults standardUserDefaults] objectForKey:kUSER_MOBILE_NUMBER]) {
+       
+        NSString *mobile = [NSString stringWithFormat:@"%@",[[NSUserDefaults standardUserDefaults] objectForKey:kUSER_MOBILE_NUMBER]];
+        
+        Person *person = [Person fetchUserForId:mobile];
+        
+        // If user is alerady registed then open chat screen
+        [self openChatScreenWithUser:person andSelectedTab:2];
+    }
+    
+    
+    //Remote notification info
+    [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+    NSDictionary *remoteNotifiInfo = [launchOptions objectForKey: UIApplicationLaunchOptionsRemoteNotificationKey];
+    
+    //Accept push notification when app is not open
+//    if (remoteNotifiInfo) {
+//        [self handleRemoteNotifications:remoteNotifiInfo];
+//    }
+    
+    
+    [[UIApplication sharedApplication]
+     setMinimumBackgroundFetchInterval:
+     UIApplicationBackgroundFetchIntervalMinimum];
+    
     return YES;
 }
 
@@ -28,10 +86,16 @@
 - (void)applicationDidEnterBackground:(UIApplication *)application {
     // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
     // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+    
+    //[[SocketLisner sharedLisner] disconnect];
 }
 
 - (void)applicationWillEnterForeground:(UIApplication *)application {
     // Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
+    
+    [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+    [self openLock:LockScreenModeNormal];    
+    [[SocketLisner sharedLisner] reconnect];
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
@@ -41,87 +105,170 @@
 - (void)applicationWillTerminate:(UIApplication *)application {
     // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     // Saves changes in the application's managed object context before the application terminates.
-    [self saveContext];
+    
 }
 
-#pragma mark - Core Data stack
 
-@synthesize managedObjectContext = _managedObjectContext;
-@synthesize managedObjectModel = _managedObjectModel;
-@synthesize persistentStoreCoordinator = _persistentStoreCoordinator;
-
-- (NSURL *)applicationDocumentsDirectory {
-    // The directory the application uses to store the Core Data store file. This code uses a directory named "BrightZone.Privy24" in the application's documents directory.
-    return [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask] lastObject];
+- (void)application:(UIApplication*)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData*)deviceToken
+{
+    // Prepare the Device Token for Registration (remove spaces and < >)
+    NSString *devToken = [[[[deviceToken description]
+                            stringByReplacingOccurrencesOfString:@"<"withString:@""]
+                           stringByReplacingOccurrencesOfString:@">" withString:@""]
+                          stringByReplacingOccurrencesOfString: @" " withString: @""];
+    NSLog(@"My token is: %@", devToken);
+    
+    self.pushToken = devToken;
+    [[NSUserDefaults standardUserDefaults] setObject:devToken forKey:kPUSH_TOKEN];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    
 }
 
-- (NSManagedObjectModel *)managedObjectModel {
-    // The managed object model for the application. It is a fatal error for the application not to be able to find and load its model.
-    if (_managedObjectModel != nil) {
-        return _managedObjectModel;
-    }
-    NSURL *modelURL = [[NSBundle mainBundle] URLForResource:@"Privy24" withExtension:@"momd"];
-    _managedObjectModel = [[NSManagedObjectModel alloc] initWithContentsOfURL:modelURL];
-    return _managedObjectModel;
+- (void)application:(UIApplication*)application didFailToRegisterForRemoteNotificationsWithError:(NSError*)error
+{
+    NSLog(@"Failed to get token, error: %@", error);
 }
 
-- (NSPersistentStoreCoordinator *)persistentStoreCoordinator {
-    // The persistent store coordinator for the application. This implementation creates and return a coordinator, having added the store for the application to it.
-    if (_persistentStoreCoordinator != nil) {
-        return _persistentStoreCoordinator;
+- (void) application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
+
+    [self handleRemoteNotifications:userInfo];
+    
+    //Success
+    completionHandler(UIBackgroundFetchResultNewData);
+}
+
+- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo {
+
+    [self handleRemoteNotifications:userInfo];
+}
+
+#pragma mark - Remote notifications handling
+
+-(void)handleRemoteNotifications:(NSDictionary *)userInfo {
+    // do your stuff
+    
+    
+}
+
+-(void)application:(UIApplication *)application performFetchWithCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler
+{
+    completionHandler(UIBackgroundFetchResultNewData);
+    
+}
+
+-(void) beginBackgroundUploadTask
+{
+    if(self.bgTaskIdentifier != UIBackgroundTaskInvalid)
+    {
+        [self endBackgroundUploadTask];
     }
     
-    // Create the coordinator and store
-    
-    _persistentStoreCoordinator = [[NSPersistentStoreCoordinator alloc] initWithManagedObjectModel:[self managedObjectModel]];
-    NSURL *storeURL = [[self applicationDocumentsDirectory] URLByAppendingPathComponent:@"Privy24.sqlite"];
-    NSError *error = nil;
-    NSString *failureReason = @"There was an error creating or loading the application's saved data.";
-    if (![_persistentStoreCoordinator addPersistentStoreWithType:NSSQLiteStoreType configuration:nil URL:storeURL options:nil error:&error]) {
-        // Report any error we got.
-        NSMutableDictionary *dict = [NSMutableDictionary dictionary];
-        dict[NSLocalizedDescriptionKey] = @"Failed to initialize the application's saved data";
-        dict[NSLocalizedFailureReasonErrorKey] = failureReason;
-        dict[NSUnderlyingErrorKey] = error;
-        error = [NSError errorWithDomain:@"YOUR_ERROR_DOMAIN" code:9999 userInfo:dict];
-        // Replace this with code to handle the error appropriately.
-        // abort() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-        NSLog(@"Unresolved error %@, %@", error, [error userInfo]);
-        abort();
-    }
-    
-    return _persistentStoreCoordinator;
+    self.bgTaskIdentifier = [[UIApplication sharedApplication] beginBackgroundTaskWithExpirationHandler:^{
+        
+        [self endBackgroundUploadTask];
+        
+    }];
 }
 
-
-- (NSManagedObjectContext *)managedObjectContext {
-    // Returns the managed object context for the application (which is already bound to the persistent store coordinator for the application.)
-    if (_managedObjectContext != nil) {
-        return _managedObjectContext;
-    }
-    
-    NSPersistentStoreCoordinator *coordinator = [self persistentStoreCoordinator];
-    if (!coordinator) {
-        return nil;
-    }
-    _managedObjectContext = [[NSManagedObjectContext alloc] init];
-    [_managedObjectContext setPersistentStoreCoordinator:coordinator];
-    return _managedObjectContext;
+-(void) endBackgroundUploadTask
+{
+    [[UIApplication sharedApplication] endBackgroundTask:self.bgTaskIdentifier ];
+    self. bgTaskIdentifier = UIBackgroundTaskInvalid;
 }
 
-#pragma mark - Core Data Saving support
+#pragma mark - Helper methods
 
-- (void)saveContext {
-    NSManagedObjectContext *managedObjectContext = self.managedObjectContext;
-    if (managedObjectContext != nil) {
+- (void)openChatScreenWithUser:(Person *)person andSelectedTab:(NSInteger)index {
+
+    // Connect socket firtst time..
+    [[SocketLisner sharedLisner] setUser:person];
+    [[SocketLisner sharedLisner] connect];
+    
+    NSString *url = [kBaseUrl stringByAppendingString:@"/saveToken"];
+    NSDictionary *param = @{@"mobile":person.mobile,@"token":self.pushToken,@"type":@"ios"};
+    
+    // Post device token here..
+    [[ConnectionManager sharedManager] postRequest:url parameters:param  success:^(id responseObject) {
+        
         NSError *error = nil;
-        if ([managedObjectContext hasChanges] && ![managedObjectContext save:&error]) {
-            // Replace this implementation with code to handle the error appropriately.
-            // abort() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-            NSLog(@"Unresolved error %@, %@", error, [error userInfo]);
-            abort();
-        }
+        NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:responseObject
+                                                                     options:kNilOptions
+                                                                       error:&error];
+        
+        NSLog(@"JSON: %@", jsonResponse);
+        
+        
+    } failure:^(NSError *error) {
+        
+    }];
+    
+    
+    // Save user mobile number locally for future use
+    if (![[NSUserDefaults standardUserDefaults] objectForKey:kUSER_MOBILE_NUMBER]) {
+        [[NSUserDefaults standardUserDefaults] setObject:person.mobile forKey:kUSER_MOBILE_NUMBER];
+        [[NSUserDefaults standardUserDefaults] synchronize];
     }
+    
+    
+    // Set Chat storyboard
+    UIStoryboard *storyboard = [UIStoryboard storyboardWithName:@"Chat" bundle: nil];
+    UITabBarController *tabBarController = [storyboard instantiateViewControllerWithIdentifier:@"sid_tabBarController"];
+    tabBarController.selectedIndex = index;
+    [self.window setRootViewController:tabBarController];
+    self.tabBarController = tabBarController;
+    
+    [[ContactManager sharedManager] fetchContacts];
+}
+
+
+#pragma mark -
+#pragma mark YMDLockScreenViewControllerDelegate
+- (void)unlockWasCancelledLockScreenViewController:(JKLLockScreenViewController *)lockScreenViewController {
+    
+    NSLog(@"LockScreenViewController dismiss because of cancel");
+}
+
+- (void)unlockWasSuccessfulLockScreenViewController:(JKLLockScreenViewController *)lockScreenViewController pincode:(NSString *)pincode {
+    
+}
+
+#pragma mark -
+#pragma mark YMDLockScreenViewControllerDataSource
+- (BOOL)lockScreenViewController:(JKLLockScreenViewController *)lockScreenViewController pincode:(NSString *)pincode {
+    
+    NSString *pin = [[NSUserDefaults standardUserDefaults] objectForKey:kMOBILE_PASS_CODE];
+    return [pin isEqualToString:pincode];
+    
+}
+
+- (BOOL)allowTouchIDLockScreenViewController:(JKLLockScreenViewController *)lockScreenViewController {
+    
+    return YES;
+}
+
+
+- (void)openLock:(LockScreenMode)mode {
+    
+    if ([[NSUserDefaults standardUserDefaults] objectForKey:kMOBILE_PASS_CODE]) {
+        
+        JKLLockScreenViewController * viewController = [[JKLLockScreenViewController alloc] initWithNibName:NSStringFromClass([JKLLockScreenViewController class]) bundle:nil];
+        [viewController setLockScreenMode:mode];
+        [viewController setDelegate:self];
+        [viewController setDataSource:self];
+        
+        UIViewController *controller = [self.window visibleViewController];
+        if (![controller isKindOfClass:[JKLLockScreenViewController class]]) {
+            [controller presentViewController:viewController animated:mode!=LockScreenModeNormal completion:NULL];
+        }
+
+    }
+    
+    
+}
+
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:kReachabilityChangedNotification object:nil];
 }
 
 @end

@@ -1,0 +1,17 @@
+version: "Apple Swift version 2.1.1 (swiftlang-700.1.101.15 clang-700.1.81)"
+options: "337534d2d2e03d5e66e3f29bbd4f6bcb"
+build_time: [510400520, 176545000]
+inputs:
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketEventHandler.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketEngineClient.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketAnyEvent.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketAckManager.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketFixUTF8.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketTypes.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SwiftRegex.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketEngine.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketIOClient.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketPacket.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/WebSocket.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketParser.swift": !dirty [490781739, 0]
+  "/Users/riteshchopra/Documents/Ritesh/Privy24/Privy24/SocketLogger.swift": !dirty [490781739, 0]
